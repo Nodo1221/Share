@@ -1,10 +1,12 @@
+use std::fs;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener};
 
 const KEEP_OPEN: bool = false;
+const FILE_PATH: &str = "src/index.html";
 
 fn main() -> std::io::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:7878")?;
+    let listener = TcpListener::bind("0.0.0.0:7878")?;
     let mut buf = [0u8; 4096];
 
     for stream in listener
@@ -23,7 +25,11 @@ fn main() -> std::io::Result<()> {
             }
         }
 
-        stream.write_all(b"Hello\n")?;
+        let body = fs::read(FILE_PATH)?;
+        let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len());
+
+        stream.write_all(header.as_bytes())?;
+        stream.write_all(&body)?;
         stream.shutdown(Shutdown::Write)?;
     }
 
