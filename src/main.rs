@@ -15,9 +15,15 @@ fn main() -> std::io::Result<()> {
         println!("Connection from {}", stream.peer_addr()?);
 
         let n = stream.read(&mut buf)?;
-        std::io::stdout().write_all(&buf[..n])?;
+        let request = String::from_utf8_lossy(&buf[..n]);
 
-        stream.write_all(b"Data\n")?;
+        for line in request.lines() {
+            if line.get(..11).is_some_and(|h| h.eq_ignore_ascii_case("User-Agent:")) {
+                println!("{line}");
+            }
+        }
+
+        stream.write_all(b"Hello\n")?;
         stream.shutdown(Shutdown::Write)?;
     }
 
