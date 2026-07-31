@@ -1,5 +1,4 @@
-use std::fs;
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, UdpSocket};
 
 const DEFAULT_PORT: u16 = 4000;
@@ -11,7 +10,7 @@ fn local_ip() -> std::io::Result<IpAddr> {
 }
 
 fn usage() -> ! {
-    eprintln!("usage: share [-k] [-p port] file");
+    eprintln!("usage: share [-k] [-p port] [file | -]");
     std::process::exit(1);
 }
 
@@ -23,9 +22,21 @@ fn main() -> std::io::Result<()> {
         .opt_value_from_str(["-p", "--port"])
         .unwrap_or_else(|_| usage())
         .unwrap_or(DEFAULT_PORT);
-    let file_path: String = pargs.free_from_str().unwrap_or_else(|_| usage());
+    
+    let file_path: Option<String> = pargs
+        .opt_free_from_str()
+        .unwrap_or_else(|_| usage());
 
-    let body = fs::read(&file_path)?;
+    let body = match file_path.as_deref() {
+        Some("-") | None if std::io::stdin().is_terminal() => usage(),
+        Some("-") | None => {
+            let mut buf = Vec::new();
+            std::io::stdin().read_to_end(&mut buf)?;
+            buf
+        }
+        Some(path) => std::fs::read(path)?,
+    };
+
     let listener = TcpListener::bind(("0.0.0.0", port))?;
 
     let (size, unit) = match body.len() as f64 {
