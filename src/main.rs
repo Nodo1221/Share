@@ -27,40 +27,39 @@ fn main() -> std::io::Result<()> {
         .opt_free_from_str()
         .unwrap_or_else(|_| usage());
 
-    let body = match file_path.as_deref() {
-        Some("-") | None if std::io::stdin().is_terminal() => usage(),
-        Some("-") | None => {
+    let body = match file_path.as_deref().unwrap_or("-") {
+        "-" if std::io::stdin().is_terminal() => usage(),
+        "-" => {
             let mut buf = Vec::new();
             std::io::stdin().read_to_end(&mut buf)?;
             buf
         }
-        Some(path) => std::fs::read(path)?,
+        path => std::fs::read(path)?,
     };
-
-    let listener = TcpListener::bind(("0.0.0.0", port))?;
 
     let (size, unit) = match body.len() as f64 {
         s @ ..1_048_576.0 => (s / 1024.0, "KiB"),
         s => (s / 1024.0 / 1024.0, "MiB"),
     };
-    
-    println!("Sharing [{size:.1}{unit}] @ {}:{port}", local_ip()?);
 
+    let listener = TcpListener::bind(("0.0.0.0", port))?;
     let mut buf = [0u8; 4096];
+    
+    println!("Sharing [{size:.1}{unit}] @ http://{}:{port}", local_ip()?);
 
     for stream in listener
         .incoming()
         .take(if keep_open { usize::MAX } else { 1 })
     {
         let mut stream = stream?;
-        println!("Connection from {}", stream.peer_addr()?);
+        println!("{}", stream.peer_addr()?);
 
         let n = stream.read(&mut buf)?;
         let request = String::from_utf8_lossy(&buf[..n]);
 
         request.lines()
-            .filter(|l| l.get(..11).is_some_and(|h| h.eq_ignore_ascii_case("User-Agent:")))
-            .for_each(|line| println!("{line}"));
+            .filter(|h| h.to_lowercase().starts_with("user-agent:"))
+            .for_each(|line| println!("\t{line}"));
 
         let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len());
         stream.write_all(header.as_bytes())?;
