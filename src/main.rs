@@ -22,10 +22,8 @@ fn main() -> std::io::Result<()> {
         .opt_value_from_str(["-p", "--port"])
         .unwrap_or_else(|_| usage())
         .unwrap_or(DEFAULT_PORT);
-    
-    let file_path: Option<String> = pargs
-        .opt_free_from_str()
-        .unwrap_or_else(|_| usage());
+
+    let file_path: Option<String> = pargs.opt_free_from_str().unwrap_or_else(|_| usage());
 
     let body = match file_path.as_deref().unwrap_or("-") {
         "-" if std::io::stdin().is_terminal() => usage(),
@@ -44,7 +42,7 @@ fn main() -> std::io::Result<()> {
 
     let listener = TcpListener::bind(("0.0.0.0", port))?;
     let mut buf = [0u8; 4096];
-    
+
     println!("Sharing [{size:.1}{unit}] @ http://{}:{port}", local_ip()?);
 
     for stream in listener
@@ -52,12 +50,13 @@ fn main() -> std::io::Result<()> {
         .take(if keep_open { usize::MAX } else { 1 })
     {
         let mut stream = stream?;
-        println!("{}", stream.peer_addr()?);
+        println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
 
         let n = stream.read(&mut buf)?;
         let request = String::from_utf8_lossy(&buf[..n]);
 
-        request.lines()
+        request
+            .lines()
             .filter(|h| h.to_lowercase().starts_with("user-agent:"))
             .for_each(|line| println!("\t{line}"));
 
