@@ -1,9 +1,8 @@
-use std::env;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, UdpSocket};
 
-const PORT: u16 = 4000;
+const DEFAULT_PORT: u16 = 4000;
 
 fn local_ip() -> std::io::Result<IpAddr> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
@@ -11,18 +10,25 @@ fn local_ip() -> std::io::Result<IpAddr> {
     Ok(socket.local_addr()?.ip())
 }
 
+fn usage() -> ! {
+    eprintln!("usage: share [-k] [-p port] file");
+    std::process::exit(1);
+}
+
 fn main() -> std::io::Result<()> {
-    let mut args = env::args().skip(1);
-    let file_path = args.next().unwrap_or_else(|| {
-        eprintln!("usage: share [-k] file");
-        std::process::exit(1);
-    });
-    let keep_open = args.any(|a| a == "-k" || a == "--keep-open");
+    let mut pargs = pico_args::Arguments::from_env();
+
+    let keep_open = pargs.contains(["-k", "--keep-open"]);
+    let port: u16 = pargs
+        .opt_value_from_str(["-p", "--port"])
+        .unwrap_or_else(|_| usage())
+        .unwrap_or(DEFAULT_PORT);
+    let file_path: String = pargs.free_from_str().unwrap_or_else(|_| usage());
 
     let body = fs::read(&file_path)?;
-    let listener = TcpListener::bind(("0.0.0.0", PORT))?;
+    let listener = TcpListener::bind(("0.0.0.0", port))?;
 
-    println!("Sharing {:.1} KiB @ {}:{}", body.len() as f64 / 1024.0, local_ip()?, PORT);
+    println!("Sharing {:.1} KiB @ {}:{}", body.len() as f64 / 1024.0, local_ip()?, port);
 
     let mut buf = [0u8; 4096];
 
