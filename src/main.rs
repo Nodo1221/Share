@@ -28,7 +28,14 @@ fn main() -> std::io::Result<()> {
     let body = fs::read(&file_path)?;
     let listener = TcpListener::bind(("0.0.0.0", port))?;
 
-    println!("Sharing {:.1} KiB @ {}:{}", body.len() as f64 / 1024.0, local_ip()?, port);
+    let size = body.len() as f64;
+    let (size, unit) = if size >= 1024.0 * 1024.0 {
+        (size / 1024.0 / 1024.0, "MiB")
+    } else {
+        (size / 1024.0, "KiB")
+    };
+
+    println!("Sharing [{:.1}] {} @ {}:{}", size, unit, local_ip()?, port);
 
     let mut buf = [0u8; 4096];
 
