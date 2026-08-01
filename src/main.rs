@@ -45,10 +45,11 @@ fn main() -> std::io::Result<()> {
 
     println!("Sharing [{size:.1}{unit}] @ http://{}:{port}", local_ip()?);
 
-    for stream in listener
-        .incoming()
-        .take(if keep_open { usize::MAX } else { 1 })
-    {
+    const EMBED_VIDEO: bool = true; // hardcoded flag for now
+
+    let to_take = if keep_open { usize::MAX } else { if EMBED_VIDEO { 2 } else { 1 } };
+
+    for stream in listener.incoming().take(to_take) {
         let mut stream = stream?;
         println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
 
@@ -60,9 +61,22 @@ fn main() -> std::io::Result<()> {
             .filter(|h| h.to_lowercase().starts_with("user-agent:"))
             .for_each(|line| println!("\t{line}"));
 
-        let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len());
+        let (content_type, payload): (&str, &[u8]) = if EMBED_VIDEO {
+            if request.starts_with("GET /video.mp4") {
+                ("video/mp4", &body)
+            } else {
+                ("text/html", b"<video src=/video.mp4 controls autoplay></video>")
+            }
+        } else {
+            ("application/octet-stream", &body) // or whatever your original content-type was
+        };
+
+        let header = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n",
+            payload.len()
+        );
         stream.write_all(header.as_bytes())?;
-        stream.write_all(&body)?;
+        stream.write_all(payload)?;
         stream.shutdown(Shutdown::Write)?;
     }
 
