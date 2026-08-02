@@ -14,6 +14,15 @@ fn usage() -> ! {
     std::process::exit(1);
 }
 
+fn parse_range(request: &str, total: usize) -> Option<(usize, usize)> {
+    let line = request.lines().find(|l| l.to_lowercase().starts_with("range:"))?;
+    let spec = line.split_once(':')?.1.trim().strip_prefix("bytes=")?;
+    let (start_s, end_s) = spec.split_once('-')?;
+    let start: usize = start_s.parse().ok()?;
+    let end: usize = if end_s.is_empty() { total.saturating_sub(1) } else { end_s.parse().ok()? };
+    (start <= end && end < total).then_some((start, end))
+}
+
 fn main() -> std::io::Result<()> {
     let mut pargs = pico_args::Arguments::from_env();
 
@@ -41,7 +50,7 @@ fn main() -> std::io::Result<()> {
         s => (s / 1024.0 / 1024.0, "MiB"),
     };
 
-    let to_take = if keep_open { usize::MAX } else if embed_video { 2 } else { 1 };
+    let to_take = if keep_open || embed_video { usize::MAX } else { 1 };
     let listener = TcpListener::bind(("0.0.0.0", port))?;
     let mut buf = [0u8; 4096];
 
@@ -59,14 +68,32 @@ fn main() -> std::io::Result<()> {
             .filter(|h| h.to_lowercase().starts_with("user-agent:"))
             .for_each(|line| println!("\t{line}"));
 
+        let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
+
+        let (status, extra_headers, sent): (&str, String, &[u8]) = match parse_range(&request, body.len()) {
+            Some((start, end)) => (
+                "206 Partial Content",
+                format!("Accept-Ranges: bytes\r\nContent-Range: bytes {start}-{end}/{}\r\n", body.len()),
+                &body[start..=end],
+            ),
+            None => (
+                "200 OK",
+                "Accept-Ranges: bytes\r\n".to_string(),
+                body.as_slice(),
+            ),
+        };
+
         let header = format!(
-            "HTTP/1.1 200 OK\r\n{}Accept-Ranges: bytes\r\nContent-Length: {}\r\n\r\n",
-            if embed_video { "Content-Type: video/mp4\r\n" } else { "" },
-            body.len()
+            "HTTP/1.1 {status}\r\n{content_type}{extra_headers}Content-Length: {}\r\n\r\n",
+            sent.len()
         );
-        
-        stream.write_all(header.as_bytes())?;
-        stream.write_all(&body)?;
+
+        if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(sent)) {
+            eprintln!("write failed (client likely aborted): {e}");
+            continue;
+        }
+        // stream.write_all(header.as_bytes())?;
+        // stream.write_all(sent)?;
     }
 
     Ok(())
