@@ -59,18 +59,14 @@ fn main() -> std::io::Result<()> {
             .filter(|h| h.to_lowercase().starts_with("user-agent:"))
             .for_each(|line| println!("\t{line}"));
 
-        let (content_type, payload): (&str, &[u8]) = match embed_video {
-            true if request.starts_with("GET /video.mp4") => ("Content-Type: video/mp4\r\n", &body),
-            true => ("Content-Type: text/html\r\n", b"<video src=/video.mp4 controls autoplay></video>"),
-            false => ("", &body),
-        };
-
         let header = format!(
-            "HTTP/1.1 200 OK\r\n{content_type}Content-Length: {}\r\n\r\n",
-            payload.len()
+            "HTTP/1.1 200 OK\r\n{}Accept-Ranges: bytes\r\nContent-Length: {}\r\n\r\n",
+            if embed_video { "Content-Type: video/mp4\r\n" } else { "" },
+            body.len()
         );
+        
         stream.write_all(header.as_bytes())?;
-        stream.write_all(payload)?;
+        stream.write_all(&body)?;
     }
 
     Ok(())
