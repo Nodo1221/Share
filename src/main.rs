@@ -22,16 +22,50 @@ fn parse_range(request: &str, total: usize) -> Option<(usize, usize)> {
     })
 }
 
+fn handle_connection<T: Read + Write>(
+    mut stream: T,
+    buf: &mut [u8],
+    body: &[u8],
+    embed_video: bool,
+) -> std::io::Result<bool> {
+    let n = stream.read(buf)?;
+    let request = String::from_utf8_lossy(&buf[..n]);
+
+    request.lines()
+        .filter(|h| h.to_lowercase().starts_with("user-agent:"))
+        .for_each(|line| println!("\t{line}"));
+
+    let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
+    let range = parse_range(&request, body.len());
+    let (status, content_range, payload) = match range {
+        Some((start, end)) => (
+            "206 Partial Content",
+            format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len()),
+            &body[start..=end],
+        ),
+        None => ("200 OK", String::new(), body),
+    };
+
+    let header = format!(
+        "HTTP/1.1 {status}\r\nAccept-Ranges: bytes\r\n{content_type}{content_range}Content-Length: {}\r\n\r\n",
+        payload.len()
+    );
+    
+    if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(payload)) {
+        eprintln!("write failed (client likely aborted): {e}");
+    }
+
+    Ok(range.is_some())
+}
+
 fn main() -> std::io::Result<()> {
     let mut pargs = pico_args::Arguments::from_env();
-
     let keep_open = pargs.contains(["-k", "--keep-open"]);
     let embed_video = pargs.contains(["-e", "--embed-video"]);
     let port: u16 = pargs
         .opt_value_from_str(["-p", "--port"])
         .unwrap_or_else(|_| usage())
         .unwrap_or(DEFAULT_PORT);
-
     let file_path: Option<String> = pargs.opt_free_from_str().unwrap_or_else(|_| usage());
 
     let body = match file_path.as_deref().unwrap_or("-") {
@@ -56,37 +90,11 @@ fn main() -> std::io::Result<()> {
     println!("Sharing [{size:.1}{unit}] @ http://{}:{port}", local_ip()?);
 
     for stream in listener.incoming() {
-        let mut stream = stream?;
+        let stream = stream?;
         println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
+        let is_range_request = handle_connection(stream, &mut buf, &body, embed_video)?;
 
-        let n = stream.read(&mut buf)?;
-        let request = String::from_utf8_lossy(&buf[..n]);
-
-        request.lines()
-            .filter(|h| h.to_lowercase().starts_with("user-agent:"))
-            .for_each(|line| println!("\t{line}"));
-
-        let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
-        let range = parse_range(&request, body.len());
-        let (status, content_range, payload) = match range {
-            Some((start, end)) => (
-                "206 Partial Content",
-                format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len()),
-                &body[start..=end],
-            ),
-            None => ("200 OK", String::new(), body.as_slice()),
-        };
-        
-        let header = format!(
-            "HTTP/1.1 {status}\r\nAccept-Ranges: bytes\r\n{content_type}{content_range}Content-Length: {}\r\n\r\n",
-            payload.len()
-        );
-
-        if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(payload)) {
-            eprintln!("write failed (client likely aborted): {e}");
-        }
-
-        if !keep_open && range.is_none() {
+        if !keep_open && !is_range_request {
             break;
         }
     }
