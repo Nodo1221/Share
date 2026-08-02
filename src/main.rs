@@ -15,12 +15,11 @@ fn usage() -> ! {
 }
 
 fn parse_range(request: &str, total: usize) -> Option<(usize, usize)> {
-    let line = request.lines().find(|l| l.to_lowercase().starts_with("range:"))?;
-    let spec = line.split_once(':')?.1.trim().strip_prefix("bytes=")?;
-    let (start_s, end_s) = spec.split_once('-')?;
-    let start: usize = start_s.parse().ok()?;
-    let end: usize = if end_s.is_empty() { total.saturating_sub(1) } else { end_s.parse().ok()? };
-    (start <= end && end < total).then_some((start, end))
+    request.lines().find_map(|line| {
+        let val = line.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("range"))?.1;
+        let (start, end) = val.trim().strip_prefix("bytes=")?.split_once('-')?;
+        Some((start.parse().ok()?, end.parse().unwrap_or(total - 1)))
+    })
 }
 
 fn main() -> std::io::Result<()> {
@@ -46,54 +45,50 @@ fn main() -> std::io::Result<()> {
     };
 
     let (size, unit) = match body.len() as f32 {
+        0.0 => usage(),
         s @ ..1_048_576.0 => (s / 1024.0, "KiB"),
         s => (s / 1024.0 / 1024.0, "MiB"),
     };
 
-    let to_take = if keep_open || embed_video { usize::MAX } else { 1 };
     let listener = TcpListener::bind(("0.0.0.0", port))?;
     let mut buf = [0u8; 4096];
 
     println!("Sharing [{size:.1}{unit}] @ http://{}:{port}", local_ip()?);
 
-    for stream in listener.incoming().take(to_take) {
+    for stream in listener.incoming() {
         let mut stream = stream?;
         println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
 
         let n = stream.read(&mut buf)?;
         let request = String::from_utf8_lossy(&buf[..n]);
 
-        request
-            .lines()
+        request.lines()
             .filter(|h| h.to_lowercase().starts_with("user-agent:"))
             .for_each(|line| println!("\t{line}"));
 
         let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
-
-        let (status, extra_headers, sent): (&str, String, &[u8]) = match parse_range(&request, body.len()) {
+        let range = parse_range(&request, body.len());
+        let (status, content_range, payload) = match range {
             Some((start, end)) => (
                 "206 Partial Content",
-                format!("Accept-Ranges: bytes\r\nContent-Range: bytes {start}-{end}/{}\r\n", body.len()),
+                format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len()),
                 &body[start..=end],
             ),
-            None => (
-                "200 OK",
-                "Accept-Ranges: bytes\r\n".to_string(),
-                body.as_slice(),
-            ),
+            None => ("200 OK", String::new(), body.as_slice()),
         };
-
+        
         let header = format!(
-            "HTTP/1.1 {status}\r\n{content_type}{extra_headers}Content-Length: {}\r\n\r\n",
-            sent.len()
+            "HTTP/1.1 {status}\r\nAccept-Ranges: bytes\r\n{content_type}{content_range}Content-Length: {}\r\n\r\n",
+            payload.len()
         );
 
-        if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(sent)) {
+        if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(payload)) {
             eprintln!("write failed (client likely aborted): {e}");
-            continue;
         }
-        // stream.write_all(header.as_bytes())?;
-        // stream.write_all(sent)?;
+
+        if !keep_open && range.is_none() {
+            break;
+        }
     }
 
     Ok(())
