@@ -112,13 +112,13 @@ fn main() -> std::io::Result<()> {
         .opt_value_from_str(["-p", "--port"])
         .unwrap_or_else(|_| usage())
         .unwrap_or(DEFAULT_PORT);
-    let file_path: Option<String> = pargs.opt_free_from_str().unwrap_or_else(|_| usage());
     let cert: Option<String> = pargs
         .opt_value_from_str(["-c", "--cert"])
         .unwrap_or_else(|_| usage());
     let key: Option<String> = pargs
         .opt_value_from_str(["-K", "--key"])
         .unwrap_or_else(|_| usage());
+    let file_path: Option<String> = pargs.opt_free_from_str().unwrap_or_else(|_| usage());
 
     let tls = match (cert, key) {
         (Some(c), Some(k)) => Some(make_tls_config(&c, &k)?),
@@ -151,13 +151,22 @@ fn main() -> std::io::Result<()> {
         let stream = stream?;
         println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
 
-        let is_range = match &tls {
+        let res = match &tls {
             Some(cfg) => {
-                let conn = ServerConnection::new(cfg.clone())
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-                handle_connection(StreamOwned::new(conn, stream), &mut buf, &body, embed_video)?
+                match ServerConnection::new(cfg.clone()) {
+                    Ok(conn) => handle_connection(StreamOwned::new(conn, stream), &mut buf, &body, embed_video),
+                    Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+                }
             }
-            None => handle_connection(stream, &mut buf, &body, embed_video)?,
+            None => handle_connection(stream, &mut buf, &body, embed_video),
+        };
+
+        let is_range = match res {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("connection error: {e}");
+                continue;
+            }
         };
 
         if !keep_open && !is_range {
