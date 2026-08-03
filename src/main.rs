@@ -14,12 +14,40 @@ fn usage() -> ! {
     std::process::exit(1);
 }
 
-fn parse_range(request: &str, total: usize) -> Option<(usize, usize)> {
-    request.lines().find_map(|line| {
-        let val = line.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("range"))?.1;
-        let (start, end) = val.trim().strip_prefix("bytes=")?.split_once('-')?;
-        Some((start.parse().ok()?, end.parse().unwrap_or(total - 1)))
-    })
+enum Request {
+    Full,
+    Range(usize, usize),
+    Bad,
+}
+
+impl Request {
+    fn parse(raw: &str, total: usize) -> Self {
+        let mut lines = raw.lines();
+
+        match lines.next().and_then(|l| l.split_whitespace().nth(1)) {
+            Some("/") => {}
+            _ => return Request::Bad,
+        }
+
+        let mut range = None;
+        for line in lines {
+            if let Some((k, v)) = line.split_once(':') {
+                if k.eq_ignore_ascii_case("user-agent") {
+                    println!("\t{line}");
+                } else if k.eq_ignore_ascii_case("range") {
+                    range = (|| {
+                        let (start, end) = v.trim().strip_prefix("bytes=")?.split_once('-')?;
+                        Some((start.parse().ok()?, end.parse().unwrap_or(total - 1)))
+                    })();
+                }
+            }
+        }
+
+        match range {
+            Some((start, end)) => Request::Range(start, end),
+            None => Request::Full,
+        }
+    }
 }
 
 fn handle_connection<T: Read + Write>(
@@ -29,33 +57,32 @@ fn handle_connection<T: Read + Write>(
     embed_video: bool,
 ) -> std::io::Result<bool> {
     let n = stream.read(buf)?;
-    let request = String::from_utf8_lossy(&buf[..n]);
+    let raw = String::from_utf8_lossy(&buf[..n]);
 
-    request.lines()
-        .filter(|h| h.to_lowercase().starts_with("user-agent:"))
-        .for_each(|line| println!("\t{line}"));
+    let request = Request::parse(&raw, body.len());
+    let is_range = matches!(request, Request::Range(..));
 
     let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
-    let range = parse_range(&request, body.len());
-    let (status, content_range, payload) = match range {
-        Some((start, end)) => (
+
+    let (status, content_range, payload): (&str, String, &[u8]) = match request {
+        Request::Bad => return Ok(false),
+        Request::Range(start, end) => (
             "206 Partial Content",
             format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len()),
             &body[start..=end],
         ),
-        None => ("200 OK", String::new(), body),
+        Request::Full => ("200 OK", String::new(), body),
     };
 
     let header = format!(
         "HTTP/1.1 {status}\r\nAccept-Ranges: bytes\r\n{content_type}{content_range}Content-Length: {}\r\n\r\n",
         payload.len()
     );
-    
     if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(payload)) {
         eprintln!("write failed (client likely aborted): {e}");
     }
 
-    Ok(range.is_some())
+    Ok(is_range)
 }
 
 fn main() -> std::io::Result<()> {
