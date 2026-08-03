@@ -1,5 +1,9 @@
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject;
+use rustls::{ServerConfig, ServerConnection, StreamOwned};
 use std::io::{IsTerminal, Read, Write};
 use std::net::{IpAddr, TcpListener, UdpSocket};
+use std::sync::Arc;
 
 const DEFAULT_PORT: u16 = 4000;
 
@@ -52,6 +56,21 @@ impl Request {
     }
 }
 
+fn make_tls_config(cert: &str, key: &str) -> std::io::Result<Arc<ServerConfig>> {
+    let certs = CertificateDer::pem_reader_iter(&mut std::fs::File::open(cert)?)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(key)?))?
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "no private key"))?;
+
+    ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map(Arc::new)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
 fn handle_connection(
     mut stream: impl Read + Write,
     buf: &mut [u8],
@@ -94,6 +113,18 @@ fn main() -> std::io::Result<()> {
         .unwrap_or_else(|_| usage())
         .unwrap_or(DEFAULT_PORT);
     let file_path: Option<String> = pargs.opt_free_from_str().unwrap_or_else(|_| usage());
+    let cert: Option<String> = pargs
+        .opt_value_from_str(["-c", "--cert"])
+        .unwrap_or_else(|_| usage());
+    let key: Option<String> = pargs
+        .opt_value_from_str(["-K", "--key"])
+        .unwrap_or_else(|_| usage());
+
+    let tls = match (cert, key) {
+        (Some(c), Some(k)) => Some(make_tls_config(&c, &k)?),
+        (None, None) => None,
+        _ => usage(),
+    };
 
     let body = match file_path.as_deref().unwrap_or("-") {
         "-" if std::io::stdin().is_terminal() => usage(),
@@ -120,7 +151,16 @@ fn main() -> std::io::Result<()> {
         let stream = stream?;
         println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
 
-        if !keep_open && !handle_connection(stream, &mut buf, &body, embed_video)? {
+        let is_range = match &tls {
+            Some(cfg) => {
+                let conn = ServerConnection::new(cfg.clone())
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                handle_connection(StreamOwned::new(conn, stream), &mut buf, &body, embed_video)?
+            }
+            None => handle_connection(stream, &mut buf, &body, embed_video)?,
+        };
+
+        if !keep_open && !is_range {
             break;
         }
     }
