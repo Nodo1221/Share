@@ -24,9 +24,8 @@ impl Request {
     fn parse(raw: &str, total: usize) -> Self {
         let mut lines = raw.lines();
 
-        match lines.next() {
-            Some(l) if l.starts_with("GET / ") => {}
-            _ => return Request::Bad,
+        if !lines.next().is_some_and(|l| l.starts_with("GET / ")) {
+            return Request::Bad;
         }
 
         let mut range = None;
@@ -41,7 +40,7 @@ impl Request {
                 range = val.trim()
                     .strip_prefix("bytes=")
                     .and_then(|r| r.split_once('-'))
-                    .and_then(|(s, e)| Some((s.parse().ok()?, e.parse().unwrap_or(total - 1))));
+                    .and_then(|(start, end)| Some((start.parse().ok()?, end.parse().unwrap_or(total - 1))));
             }
         }
 
