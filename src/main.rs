@@ -1,11 +1,11 @@
-use rustls::pki_types::CertificateDer;
-use rustls::pki_types::pem::PemObject;
-use rustls::{ServerConfig, ServerConnection, StreamOwned};
-use rustls::pki_types::{PrivateKeyDer};
-use std::sync::Arc;
+use clap::{Command, CommandFactory, Parser};
+use rustls::{
+    pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+    {ServerConfig, ServerConnection, StreamOwned},
+};
 use std::io::{IsTerminal, Read, Write};
 use std::net::{IpAddr, TcpListener, UdpSocket};
-use clap::{Command, CommandFactory, Parser};
+use std::sync::Arc;
 
 const DEFAULT_PORT: u16 = 4000;
 
@@ -46,7 +46,9 @@ impl Request {
                 range = val.trim()
                     .strip_prefix("bytes=")
                     .and_then(|r| r.split_once('-'))
-                    .and_then(|(start, end)| Some((start.parse().ok()?, end.parse().unwrap_or(total - 1))));
+                    .and_then(|(start, end)| {
+                        Some((start.parse().ok()?, end.parse().unwrap_or(total - 1)))
+                    });
             }
         }
 
@@ -60,17 +62,16 @@ impl Request {
 
 fn make_tls_config(cert: &str, key: &str) -> Arc<ServerConfig> {
     let certs = CertificateDer::pem_file_iter(cert)
-        .expect("failed to open certificate file")
+        .unwrap()
         .collect::<Result<Vec<_>, _>>()
-        .expect("failed to parse certificate");
+        .unwrap();
 
-    let key = PrivateKeyDer::from_pem_file(key)
-        .expect("failed to load or parse private key");
+    let key = PrivateKeyDer::from_pem_file(key).unwrap();
 
     let config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .expect("failed to build TLS configuration");
+        .unwrap();
 
     Arc::new(config)
 }
@@ -100,8 +101,11 @@ fn handle_connection(
         "HTTP/1.1 {status}\r\nAccept-Ranges: bytes\r\n{content_type}{content_range}Content-Length: {}\r\n\r\n",
         payload.len()
     );
-    
-    if let Err(e) = stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(payload)) {
+
+    if let Err(e) = stream
+        .write_all(header.as_bytes())
+        .and_then(|_| stream.write_all(payload))
+    {
         eprintln!("write failed (client likely aborted): {e}");
     }
 
@@ -139,9 +143,9 @@ fn main() -> std::io::Result<()> {
         path => std::fs::read(path)?,
     };
 
-    let tls = match args.tls {
-        true => Some(make_tls_config("cert.pem", "key.pem")),
-        false => None,
+    let (tls, protocol) = match args.tls {
+        true => (Some(make_tls_config("~/.config/share/cert.pem", "~/.config/share/key.pem")), "https"),
+        false => (None, "http"),
     };
 
     let (size, unit) = match body.len() as f32 {
@@ -153,19 +157,22 @@ fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", args.port))?;
     let mut buf = [0u8; 4096];
 
-    println!("Sharing [{size:.1}{unit}] @ http://{}:{}", args.port, local_ip());
+    println!("Sharing [{size:.1}{unit}] @ {protocol}://{}:{}", local_ip(), args.port);
 
     for stream in listener.incoming() {
         let stream = stream?;
         println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
 
         let res = match &tls {
-            Some(cfg) => {
-                match ServerConnection::new(cfg.clone()) {
-                    Ok(conn) => handle_connection(StreamOwned::new(conn, stream), &mut buf, &body, args.embed_video),
-                    Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-                }
-            }
+            Some(cfg) => match ServerConnection::new(cfg.clone()) {
+                Ok(conn) => handle_connection(
+                    StreamOwned::new(conn, stream),
+                    &mut buf,
+                    &body,
+                    args.embed_video,
+                ),
+                Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+            },
             None => handle_connection(stream, &mut buf, &body, args.embed_video),
         };
 
