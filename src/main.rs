@@ -1,9 +1,10 @@
 use rustls::pki_types::CertificateDer;
 use rustls::pki_types::pem::PemObject;
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
+use rustls::pki_types::{PrivateKeyDer};
+use std::sync::Arc;
 use std::io::{IsTerminal, Read, Write};
 use std::net::{IpAddr, TcpListener, UdpSocket};
-use std::sync::Arc;
 
 const DEFAULT_PORT: u16 = 4000;
 
@@ -56,19 +57,21 @@ impl Request {
     }
 }
 
-fn make_tls_config(cert: &str, key: &str) -> std::io::Result<Arc<ServerConfig>> {
-    let certs = CertificateDer::pem_reader_iter(&mut std::fs::File::open(cert)?)
+fn make_tls_config(cert: &str, key: &str) -> Arc<ServerConfig> {
+    let certs = CertificateDer::pem_file_iter(cert)
+        .expect("failed to open certificate file")
         .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .expect("failed to parse certificate");
 
-    let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(key)?))?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "no private key"))?;
+    let key = PrivateKeyDer::from_pem_file(key)
+        .expect("failed to load or parse private key");
 
-    ServerConfig::builder()
+    let config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .map(Arc::new)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        .expect("failed to build TLS configuration");
+
+    Arc::new(config)
 }
 
 fn handle_connection(
