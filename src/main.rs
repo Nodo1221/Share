@@ -160,8 +160,9 @@ fn main() -> std::io::Result<()> {
     println!("Sharing [{size:.1}{unit}] @ {protocol}://{}:{}", local_ip(), args.port);
 
     for stream in listener.incoming() {
-        let stream = stream?;
-        println!("\x1b[34m{}\x1b[0m", stream.peer_addr()?);
+        let Ok(stream) = stream else { continue };
+        let Ok(addr) = stream.peer_addr() else { continue };
+        println!("\x1b[34m{addr}\x1b[0m");
 
         let res = match &tls {
             Some(cfg) => match ServerConnection::new(cfg.clone()) {
@@ -171,20 +172,12 @@ fn main() -> std::io::Result<()> {
                     &body,
                     args.embed_video,
                 ),
-                Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+                Err(_e) => continue,
             },
             None => handle_connection(stream, &mut buf, &body, args.embed_video),
         };
 
-        let is_range = match res {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("connection error: {e}");
-                continue;
-            }
-        };
-
-        if !args.keep_open && !is_range {
+        if !args.keep_open && matches!(res, Ok(false)) {
             break;
         }
     }
