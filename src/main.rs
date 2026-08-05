@@ -3,7 +3,7 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
     {ServerConfig, ServerConnection, StreamOwned},
 };
-use std::io::{IsTerminal, Read, Write};
+use std::{io::{IsTerminal, Read, Write}, path::PathBuf};
 use std::net::{IpAddr, TcpListener, UdpSocket};
 use std::sync::Arc;
 
@@ -60,7 +60,7 @@ impl Request {
     }
 }
 
-fn make_tls_config(cert: &str, key: &str) -> Arc<ServerConfig> {
+fn make_tls_config(cert: PathBuf, key: PathBuf) -> Arc<ServerConfig> {
     let certs = CertificateDer::pem_file_iter(cert)
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
@@ -114,37 +114,53 @@ fn handle_connection(
 
 #[derive(Parser)]
 struct Args {
-    #[arg(short = 't')]
+    /// Enable TLS
+    #[arg(short, long)]
     tls: bool,
 
-    #[arg(short = 'k')]
+    /// Accept multiple connections
+    #[arg(short, long)]
     keep_open: bool,
 
-    #[arg(short = 'e')]
+    /// Enable the built-in video player; auto-enables -k
+    #[arg(short, long)]
     embed_video: bool,
 
-    #[arg(short = 'p', default_value_t = DEFAULT_PORT)]
+    #[arg(short, long, default_value_t = DEFAULT_PORT)]
     port: u16,
 
-    file_path: Option<String>,
+    #[arg(short, long, default_value_t = "0.0.0.0".to_owned())]
+    bind: String,
+
+    /// Specify an alternative PEM pair dir [default: $HOME/.config/share]
+    #[arg(long)]
+    pem: Option<PathBuf>,
+
+    /// Reads from stdin if omitted
+    file_path: Option<PathBuf>,
 }
 
 fn main() -> std::io::Result<()> {
     let cmd = Args::command();
     let args = Args::parse();
 
-    let body = match args.file_path.as_deref().unwrap_or("-") {
-        "-" if std::io::stdin().is_terminal() => usage(cmd),
-        "-" => {
+    let keep_open = args.keep_open || args.embed_video;
+    let pem = args.pem.unwrap_or(home::home_dir().unwrap_or(".".into()));
+
+    let (body, filename) = match args.file_path.as_deref() {
+        None if std::io::stdin().is_terminal() => usage(cmd),
+        None => {
             let mut buf = Vec::new();
             std::io::stdin().read_to_end(&mut buf)?;
-            buf
+            (buf, "-".to_owned())
         }
-        path => std::fs::read(path)?,
+        Some(path) => (std::fs::read(path)?, path.file_name().expect("empty filename handled").to_string_lossy().into_owned()),
     };
 
     let (tls, protocol) = match args.tls {
-        true => (Some(make_tls_config("~/.config/share/cert.pem", "~/.config/share/key.pem")), "https"),
+        true => (
+            Some(make_tls_config(pem.join(".config/share/cert.pem"), pem.join("~/.config/share/key.pem"))), 
+            "https"),
         false => (None, "http"),
     };
 
@@ -154,10 +170,10 @@ fn main() -> std::io::Result<()> {
         s => (s / 1024.0 / 1024.0, "MiB"),
     };
 
-    let listener = TcpListener::bind(("0.0.0.0", args.port))?;
+    let listener = TcpListener::bind((args.bind, args.port))?;
     let mut buf = [0u8; 4096];
 
-    println!("Sharing [{size:.1}{unit}] @ {protocol}://{}:{}", local_ip(), args.port);
+    println!("Sharing {filename} [{size:.1}{unit}] @ {protocol}://{}:{}", local_ip(), args.port);
 
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
@@ -177,7 +193,7 @@ fn main() -> std::io::Result<()> {
             None => handle_connection(stream, &mut buf, &body, args.embed_video),
         };
 
-        if !args.keep_open && matches!(res, Ok(false)) {
+        if !keep_open && matches!(res, Ok(false)) {
             break;
         }
     }
