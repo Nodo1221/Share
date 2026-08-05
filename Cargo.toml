@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.6.5", default-features = false, features = ["derive", "std", "help", "usage"] }
 home = "0.5.12"
-rustls = "0.23.43"
+rustls = { version = "0.23.43", default-features = false, features = ["std", "ring"] }

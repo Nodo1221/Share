@@ -61,6 +61,8 @@ impl Request {
 }
 
 fn make_tls_config(cert: PathBuf, key: PathBuf) -> Arc<ServerConfig> {
+    println!("{cert:?} {key:?}");
+
     let certs = CertificateDer::pem_file_iter(cert)
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
@@ -159,7 +161,7 @@ fn main() -> std::io::Result<()> {
 
     let (tls, protocol) = match args.tls {
         true => (
-            Some(make_tls_config(pem.join(".config/share/cert.pem"), pem.join("~/.config/share/key.pem"))), 
+            Some(make_tls_config(pem.join(".config/share/cert.pem"), pem.join(".config/share/key.pem"))), 
             "https"),
         false => (None, "http"),
     };
