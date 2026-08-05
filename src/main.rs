@@ -3,11 +3,12 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
     {ServerConfig, ServerConnection, StreamOwned},
 };
-use std::{io::{IsTerminal, Read, Write}, path::PathBuf};
 use std::net::{IpAddr, TcpListener, UdpSocket};
 use std::sync::Arc;
-
-const DEFAULT_PORT: u16 = 4000;
+use std::{
+    io::{IsTerminal, Read, Write},
+    path::PathBuf,
+};
 
 fn local_ip() -> IpAddr {
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
@@ -128,9 +129,11 @@ struct Args {
     #[arg(short, long)]
     embed_video: bool,
 
-    #[arg(short, long, default_value_t = DEFAULT_PORT)]
+    /// Choose a different port
+    #[arg(short, long, default_value_t = 4000)]
     port: u16,
 
+    /// Specify the interface to bind to
     #[arg(short, long, default_value_t = "0.0.0.0".to_owned())]
     bind: String,
 
@@ -147,7 +150,7 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     let keep_open = args.keep_open || args.embed_video;
-    let pem = args.pem.unwrap_or(home::home_dir().unwrap_or(".".into()));
+    let pem = args.pem.unwrap_or_else(|| home::home_dir().expect("$HOME should be set"));
 
     let (body, filename) = match args.file_path.as_deref() {
         None if std::io::stdin().is_terminal() => usage(cmd),
@@ -156,13 +159,23 @@ fn main() -> std::io::Result<()> {
             std::io::stdin().read_to_end(&mut buf)?;
             (buf, "-".to_owned())
         }
-        Some(path) => (std::fs::read(path)?, path.file_name().expect("empty filename handled").to_string_lossy().into_owned()),
+        Some(path) => (
+            std::fs::read(path)?,
+            path.file_name()
+                .expect("empty filename handled")
+                .to_string_lossy()
+                .into_owned(),
+        ),
     };
 
     let (tls, protocol) = match args.tls {
         true => (
-            Some(make_tls_config(pem.join(".config/share/cert.pem"), pem.join(".config/share/key.pem"))), 
-            "https"),
+            Some(make_tls_config(
+                pem.join(".config/share/cert.pem"),
+                pem.join(".config/share/key.pem"),
+            )),
+            "https",
+        ),
         false => (None, "http"),
     };
 
