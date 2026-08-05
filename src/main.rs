@@ -105,12 +105,9 @@ fn handle_connection(
         payload.len()
     );
 
-    if let Err(e) = stream
+    let _ = stream
         .write_all(header.as_bytes())
-        .and_then(|_| stream.write_all(payload))
-    {
-        eprintln!("write failed (client likely aborted): {e}");
-    }
+        .and_then(|_| stream.write_all(payload));
 
     Ok(matches!(request, Request::Range(..)))
 }
@@ -193,7 +190,7 @@ fn main() -> std::io::Result<()> {
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         let Ok(addr) = stream.peer_addr() else { continue };
-        println!("\x1b[34m{addr}\x1b[0m");
+        println!("\x1b[31m{addr}\x1b[0m");
 
         let res = match &tls {
             Some(cfg) => match ServerConnection::new(cfg.clone()) {
