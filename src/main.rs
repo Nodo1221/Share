@@ -147,7 +147,9 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     let keep_open = args.keep_open || args.embed_video;
-    let pem = args.pem.unwrap_or_else(|| home::home_dir().expect("$HOME should be set"));
+    let pem = args.pem.unwrap_or_else(|| {
+        home::home_dir().expect("$HOME should be set").join(".config/share")
+    });
 
     let (body, filename) = match args.file_path.as_deref() {
         None if std::io::stdin().is_terminal() => usage(cmd),
@@ -167,10 +169,7 @@ fn main() -> std::io::Result<()> {
 
     let (tls, protocol) = match args.tls {
         true => (
-            Some(make_tls_config(
-                pem.join(".config/share/cert.pem"),
-                pem.join(".config/share/key.pem"),
-            )),
+            Some(make_tls_config(pem.join("cert.pem"), pem.join("key.pem"))),
             "https",
         ),
         false => (None, "http"),
