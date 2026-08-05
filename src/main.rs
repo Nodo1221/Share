@@ -1,12 +1,12 @@
 use clap::{Command, CommandFactory, Parser};
 use rustls::{
+    ServerConfig, ServerConnection, StreamOwned,
     pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
-    {ServerConfig, ServerConnection, StreamOwned},
 };
 use std::net::{IpAddr, TcpListener, UdpSocket};
 use std::sync::Arc;
 use std::{
-    io::{IsTerminal, Read, Write},
+    io::{ErrorKind, IsTerminal, Read, Write},
     path::PathBuf,
 };
 
@@ -126,7 +126,7 @@ struct Args {
     #[arg(short, long)]
     embed_video: bool,
 
-    /// Choose a different port
+    /// Choose a different port; 0 for random
     #[arg(short, long, default_value_t = 4000)]
     port: u16,
 
@@ -181,10 +181,19 @@ fn main() -> std::io::Result<()> {
         s => (s / 1024.0 / 1024.0, "MiB"),
     };
 
-    let listener = TcpListener::bind((args.bind, args.port))?;
+    let listener = match TcpListener::bind((args.bind.as_ref(), args.port)) {
+        Ok(l) => l,
+        Err(e) if e.kind() == ErrorKind::AddrInUse => {
+            eprintln!("\x1b[33mwarning: address already in use; falling back to a randomised port\x1b[0m");
+            TcpListener::bind((args.bind, 0))?
+        }
+        Err(e) => return Err(e),
+    };
+    
+    let port = listener.local_addr()?.port();
     let mut buf = [0u8; 4096];
 
-    println!("Sharing {filename} [{size:.1}{unit}] @ {protocol}://{}:{}", local_ip(), args.port);
+    println!("Sharing {filename} [{size:.1}{unit}] @ {protocol}://{}:{port}", local_ip());
 
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
