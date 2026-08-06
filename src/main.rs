@@ -200,7 +200,7 @@ fn handle_connection(stream: impl Read + Write, body: &[u8], embed_video: bool) 
 
 #[derive(Parser)]
 struct Args {
-    /// Enable TLS
+    /// Enable TLS; auto-enables -k
     #[arg(short, long)]
     tls: bool,
 
@@ -236,7 +236,7 @@ fn main() -> std::io::Result<()> {
     let cmd = Args::command();
     let args = Args::parse();
 
-    let keep_open = args.keep_open || args.embed_video || args.accept_uploads;
+    let keep_open = args.keep_open || args.tls || args.embed_video || args.accept_uploads;
     let pem = args.pem.unwrap_or_else(|| {
         home::home_dir().expect("$HOME should be set").join(".config/share")
     });

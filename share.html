@@ -1,11 +1,343 @@
-<html>
-    <head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Vibe Upload ✨</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8a2be2;
+            --secondary: #ff007f;
+            --bg-color: #09090b;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #ffffff;
+            --text-muted: #a1a1aa;
+        }
 
-    </head>
-    <body>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="files" multiple>
-        <button type="submit">Upload</button>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated Background Blobs */
+        .blob {
+            position: absolute;
+            filter: blur(80px);
+            z-index: 0;
+            opacity: 0.6;
+            animation: float 10s infinite ease-in-out alternate;
+        }
+
+        .blob-1 {
+            width: 400px;
+            height: 400px;
+            background: var(--primary);
+            top: -10%;
+            left: -10%;
+            border-radius: 50%;
+        }
+
+        .blob-2 {
+            width: 300px;
+            height: 300px;
+            background: var(--secondary);
+            bottom: -10%;
+            right: -5%;
+            border-radius: 50%;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, 50px) scale(1.1); }
+        }
+
+        /* Glassmorphic Container */
+        .upload-container {
+            position: relative;
+            z-index: 10;
+            width: 90%;
+            max-width: 480px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px 30px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #b483ff, #ff7bca);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 30px;
+        }
+
+        /* Drag & Drop Zone */
+        .drop-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 40px 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            background: rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--primary);
+            background: rgba(138, 43, 226, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px -10px rgba(138, 43, 226, 0.3);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: inline-block;
+            transition: transform 0.3s ease;
+        }
+
+        .drop-zone:hover .drop-zone-icon {
+            transform: scale(1.1) translateY(-5px);
+        }
+
+        .drop-zone-text {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .drop-zone-subtext {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Hide the actual ugly input, but keep it functional */
+        .file-input {
+            opacity: 0;
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        /* File List Preview */
+        .file-list {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease forwards;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Submit Button */
+        .submit-btn {
+            width: 100%;
+            margin-top: 25px;
+            padding: 16px;
+            border: none;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(255, 0, 127, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px rgba(255, 0, 127, 0.4);
+        }
+
+        .submit-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Custom Scrollbar for file list */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 480px) {
+            .upload-container {
+                padding: 30px 20px;
+                width: 95%;
+            }
+            .header h1 {
+                font-size: 1.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Animations -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <div class="upload-container">
+        <div class="header">
+            <h1>Drop it like it's hot</h1>
+            <p>Upload your files to the void.</p>
+        </div>
+
+        <!-- The exact form method requested -->
+        <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form">
+            
+            <div class="drop-zone" id="drop-zone">
+                <span class="drop-zone-icon">✨</span>
+                <div class="drop-zone-text">Click or drag files here</div>
+                <div class="drop-zone-subtext">Supports anything vibes-compatible</div>
+                
+                <!-- Native input overlaid invisibly -->
+                <input type="file" name="files" multiple class="file-input" id="file-input">
+            </div>
+
+            <div class="file-list" id="file-list"></div>
+
+            <button type="submit" class="submit-btn" id="submit-btn">
+                Ship it 🚀
+            </button>
         </form>
-    </body>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const submitBtn = document.getElementById('submit-btn');
+
+        // Prevent default browser behavior for dragging
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Add visual cues for drag events
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('dragover');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('dragover');
+            });
+        });
+
+        // Handle dropped files and route them to the native input
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            // Assign dropped files to the hidden native input
+            fileInput.files = files;
+            updateFileList();
+        });
+
+        // Handle files selected via click
+        fileInput.addEventListener('change', updateFileList);
+
+        // Render the UI file list
+        function updateFileList() {
+            fileList.innerHTML = '';
+            const files = Array.from(fileInput.files);
+            
+            if (files.length === 0) return;
+
+            files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                
+                // Truncate long names
+                const fileName = file.name.length > 35 
+                    ? file.name.substring(0, 32) + '...' 
+                    : file.name;
+                    
+                fileItem.innerHTML = `
+                    <span style="font-size: 1.2rem;">📄</span>
+                    <span style="font-weight: 600; color: #fff;">${fileName}</span>
+                    <span style="margin-left: auto; color: var(--text-muted); font-size: 0.8rem;">
+                        ${(file.size / (1024 * 1024)).toFixed(2)} MB
+                    </span>
+                `;
+                fileList.appendChild(fileItem);
+            });
+            
+            // Optional: Give the submit button a little pulse when files are ready
+            submitBtn.style.animation = 'none';
+            setTimeout(() => {
+                submitBtn.style.transform = 'scale(1.02)';
+                setTimeout(() => submitBtn.style.transform = 'scale(1)', 200);
+            }, 50);
+        }
+    </script>
+</body>
 </html>
