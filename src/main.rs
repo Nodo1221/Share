@@ -6,7 +6,8 @@ use rustls::{
 use std::net::{IpAddr, TcpListener, UdpSocket};
 use std::sync::Arc;
 use std::{
-    io::{ErrorKind, IsTerminal, Read, Write},
+    fs::File,
+    io::{ErrorKind, IsTerminal, BufReader, BufRead, Read, Write, BufWriter},
     path::PathBuf,
 };
 
@@ -24,14 +25,37 @@ fn usage(mut args: Command) -> ! {
 enum Request {
     GetRoot,
     Range(usize, usize),
+    Post { boundary: String },
     Bad,
 }
 
 impl Request {
     fn parse(raw: &str, total: usize) -> Self {
         let mut lines = raw.lines();
+        let Some(first) = lines.next() else { return Request::Bad };
 
-        if !lines.next().is_some_and(|l| l.starts_with("GET / ")) {
+        if first.starts_with("POST /upload") {
+            let mut length = None;
+            let mut boundary = None;
+
+            for line in lines {
+                let Some((key, val)) = line.split_once(':') else { continue };
+                let val = val.trim();
+
+                if key.eq_ignore_ascii_case("content-length") {
+                    length = val.parse().ok();
+                } else if key.eq_ignore_ascii_case("content-type") {
+                    boundary = val.split_once("boundary=").map(|(_, b)| b.to_string());
+                }
+            }
+
+            return match (length, boundary) {
+                (Some(length), Some(boundary)) => Request::Post { boundary },
+                _ => Request::Bad,
+            };
+        }
+
+        if !first.starts_with("GET / ") {
             return Request::Bad;
         }
 
@@ -79,6 +103,60 @@ fn make_tls_config(cert: PathBuf, key: PathBuf) -> Arc<ServerConfig> {
     Arc::new(config)
 }
 
+fn strip_crlf(line: &[u8]) -> &[u8] {
+    line.strip_suffix(b"\r\n").or(line.strip_suffix(b"\n")).unwrap_or(line)
+}
+
+fn handle_post(reader: &mut BufReader<impl Read>, boundary: &str) {
+    let delim = format!("--{boundary}").into_bytes();
+    let end = format!("--{boundary}--").into_bytes();
+    let mut line = Vec::new();
+
+    loop {
+        line.clear();
+        if reader.read_until(b'\n', &mut line).unwrap_or(0) == 0 { break }
+        if strip_crlf(&line) == end { break }
+        if strip_crlf(&line) != delim { continue }
+
+        let mut filename = None;
+        loop {
+            line.clear();
+            reader.read_until(b'\n', &mut line).expect("client already promised this via Content-Length");
+            if strip_crlf(&line).is_empty() { break }
+
+            let header = String::from_utf8_lossy(&line);
+            if let Some(name) = header.split("filename=\"").nth(1).and_then(|s| s.split('"').next()) {
+                filename = Some(name.to_string());
+            }
+        }
+
+        let Some(filename) = filename else { continue };
+        let mut out = BufWriter::new(File::create(&filename).expect("upload dir should be writable"));
+
+        let mut pending: Option<Vec<u8>> = None;
+        let is_end;
+        loop {
+            let mut buf = Vec::new();
+            reader.read_until(b'\n', &mut buf).expect("connection shouldn't drop mid-upload");
+            let t = strip_crlf(&buf);
+
+            if t == delim || t == end {
+                is_end = t == end;
+                if let Some(p) = pending.take() {
+                    out.write_all(strip_crlf(&p)).unwrap();
+                }
+                break;
+            }
+            if let Some(p) = pending.replace(buf) {
+                out.write_all(&p).unwrap();
+            }
+        }
+        out.flush().unwrap();
+        println!("\tsaved {filename}");
+        if is_end { break }
+    }
+}
+
 fn handle_connection(
     mut stream: impl Read + Write,
     buf: &mut [u8],
@@ -90,6 +168,16 @@ fn handle_connection(
     let request = Request::parse(&raw, body.len());
     let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
 
+    if let Request::Post { boundary } = &request {
+        let header_end = raw.find("\r\n\r\n").map(|i| i + 4).unwrap_or(n);
+        let leftover = &buf[header_end..n];
+        let mut reader = BufReader::new(leftover.chain(&mut stream));
+        handle_post(&mut reader, boundary);
+
+        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        return Ok(false);
+    }
+
     let (status, content_range, payload) = match request {
         Request::GetRoot => ("200 OK", String::new(), body),
         Request::Range(start, end) => (
@@ -97,7 +185,7 @@ fn handle_connection(
             format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len()),
             &body[start..=end],
         ),
-        Request::Bad => return Ok(false),
+        Request::Bad | Request::Post { .. } => return Ok(false),
     };
 
     let header = format!(
@@ -106,7 +194,7 @@ fn handle_connection(
     );
 
     let _ = stream
-        .write_all(header.as_bytes())
+    .write_all(header.as_bytes())
         .and_then(|_| stream.write_all(payload));
 
     Ok(matches!(request, Request::Range(..)))
@@ -138,6 +226,9 @@ struct Args {
     #[arg(long)]
     pem: Option<PathBuf>,
 
+    #[arg(short = 'u', long)]
+    accept_uploads: bool,
+
     /// Reads from stdin if omitted
     file_path: Option<PathBuf>,
 }
@@ -150,8 +241,10 @@ fn main() -> std::io::Result<()> {
     let pem = args.pem.unwrap_or_else(|| {
         home::home_dir().expect("$HOME should be set").join(".config/share")
     });
+    let path = if !args.accept_uploads { args.file_path } else { Some(PathBuf::from(home::home_dir().unwrap().join(".config/share/share.html"))) };
+    println!("{path:?}");
 
-    let (body, filename) = match args.file_path.as_deref() {
+    let (body, filename) = match path.as_deref() {
         None if std::io::stdin().is_terminal() => usage(cmd),
         None => {
             let mut buf = Vec::new();
