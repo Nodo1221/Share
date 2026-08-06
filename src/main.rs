@@ -30,9 +30,11 @@ enum Request {
 }
 
 impl Request {
-    fn parse(raw: &str, total: usize) -> Self {
-        let mut lines = raw.lines();
-        let Some(first) = lines.next() else { return Request::Bad };
+    fn parse(reader: &mut BufReader<impl Read>, total: usize) -> Self {
+        let mut first = String::new();
+        if reader.read_line(&mut first).unwrap_or(0) == 0 {
+            return Request::Bad;
+        }
 
         let is_post = first.starts_with("POST /upload ");
         if !is_post && !first.starts_with("GET / ") {
@@ -40,13 +42,18 @@ impl Request {
         }
 
         let (mut range, mut boundary) = (None, None);
+        let mut line = String::new();
 
-        for line in lines {
+        loop {
+            line.clear();
+            if reader.read_line(&mut line).unwrap_or(0) == 0 { break }
+            if line == "\r\n" || line == "\n" { break }
+
             let Some((key, val)) = line.split_once(':') else { continue };
             let val = val.trim();
 
             if key.eq_ignore_ascii_case("user-agent") {
-                println!("\t{line}");
+                println!("\t{}", line.trim_end());
             }
             
             else if key.eq_ignore_ascii_case("range") {
@@ -96,20 +103,22 @@ fn strip_crlf(line: &[u8]) -> &[u8] {
 
 fn handle_post(reader: &mut BufReader<impl Read>, boundary: &str) {
     let delim = format!("--{boundary}").into_bytes();
-    let end = format!("--{boundary}--").into_bytes();
+    let end = [delim.as_slice(), b"--"].concat();
     let mut line = Vec::new();
 
     loop {
         line.clear();
-        if reader.read_until(b'\n', &mut line).unwrap_or(0) == 0 { break }
-        if strip_crlf(&line) == end { break }
-        if strip_crlf(&line) != delim { continue }
+        if reader.read_until(b'\n', &mut line).unwrap_or(0) == 0 { break; }
+
+        let t = strip_crlf(&line);
+        if t == end { break; }
+        if t != delim { continue; }
 
         let mut filename = None;
         loop {
             line.clear();
             reader.read_until(b'\n', &mut line).expect("client already promised this via Content-Length");
-            if strip_crlf(&line).is_empty() { break }
+            if strip_crlf(&line).is_empty() { break; }
 
             let header = String::from_utf8_lossy(&line);
             if let Some(name) = header.split("filename=\"").nth(1).and_then(|s| s.split('"').next()) {
@@ -117,50 +126,41 @@ fn handle_post(reader: &mut BufReader<impl Read>, boundary: &str) {
             }
         }
 
-        let Some(filename) = filename else { continue };
+        let Some(filename) = filename else { continue; };
         let mut out = BufWriter::new(File::create(&filename).expect("upload dir should be writable"));
 
-        let mut pending: Option<Vec<u8>> = None;
-        let is_end;
-        loop {
-            let mut buf = Vec::new();
-            reader.read_until(b'\n', &mut buf).expect("connection shouldn't drop mid-upload");
-            let t = strip_crlf(&buf);
+        let mut prev = Vec::new();
+        let mut curr = Vec::new();
+        reader.read_until(b'\n', &mut prev).expect("connection shouldn't drop mid-upload");
 
-            if t == delim || t == end {
-                is_end = t == end;
-                if let Some(p) = pending.take() {
-                    out.write_all(strip_crlf(&p)).unwrap();
-                }
-                break;
+        let is_end = loop {
+            let t_prev = strip_crlf(&prev);
+            if t_prev == delim || t_prev == end {
+                break t_prev == end; // Handles completely empty files.
             }
-            if let Some(p) = pending.replace(buf) {
-                out.write_all(&p).unwrap();
+
+            curr.clear();
+            reader.read_until(b'\n', &mut curr).expect("connection shouldn't drop mid-upload");
+
+            let t_curr = strip_crlf(&curr);
+            if t_curr == delim || t_curr == end {
+                out.write_all(strip_crlf(&prev)).unwrap();
+                break t_curr == end;
             }
-        }
+
+            out.write_all(&prev).unwrap();
+            std::mem::swap(&mut prev, &mut curr);
+        };
+
         out.flush().unwrap();
         println!("\tsaved {filename}");
-        if is_end { break }
+        if is_end { break; }
     }
 }
 
-fn handle_connection(
-    stream: impl Read + Write,
-    body: &[u8],
-    embed_video: bool,
-) -> std::io::Result<bool> {
+fn handle_connection(stream: impl Read + Write, body: &[u8], embed_video: bool) -> std::io::Result<bool> {
     let mut reader = BufReader::new(stream);
-
-    let mut raw = String::new();
-    let mut line = String::new();
-    loop {
-        line.clear();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 { break }
-        if line == "\r\n" || line == "\n" { break }
-        raw.push_str(&line);
-    }
-
-    let request = Request::parse(&raw, body.len());
+    let request = Request::parse(&mut reader, body.len());
     let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
 
     if let Request::Post { boundary } = &request {
@@ -218,7 +218,8 @@ struct Args {
     #[arg(long)]
     pem: Option<PathBuf>,
 
-    #[arg(short = 'u', long)]
+    /// Host an upload website; auto-enables -k
+    #[arg(short = 'u', long, conflicts_with_all = ["embed_video", "file_path"])]
     accept_uploads: bool,
 
     /// Reads from stdin if omitted
@@ -229,7 +230,7 @@ fn main() -> std::io::Result<()> {
     let cmd = Args::command();
     let args = Args::parse();
 
-    let keep_open = args.keep_open || args.embed_video;
+    let keep_open = args.keep_open || args.embed_video || args.accept_uploads;
     let pem = args.pem.unwrap_or_else(|| {
         home::home_dir().expect("$HOME should be set").join(".config/share")
     });
