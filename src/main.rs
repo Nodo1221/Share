@@ -34,8 +34,8 @@ impl Request {
         let mut lines = raw.lines();
         let Some(first) = lines.next() else { return Request::Bad };
 
-        if first.starts_with("POST /upload") {
-            let mut length = None;
+        if first.starts_with("POST /upload ") {
+            let mut length: Option<usize> = None;
             let mut boundary = None;
 
             for line in lines {
@@ -50,7 +50,7 @@ impl Request {
             }
 
             return match (length, boundary) {
-                (Some(length), Some(boundary)) => Request::Post { boundary },
+                (Some(_), Some(boundary)) => Request::Post { boundary },
                 _ => Request::Bad,
             };
         }
@@ -158,23 +158,27 @@ fn handle_post(reader: &mut BufReader<impl Read>, boundary: &str) {
 }
 
 fn handle_connection(
-    mut stream: impl Read + Write,
-    buf: &mut [u8],
+    stream: impl Read + Write,
     body: &[u8],
     embed_video: bool,
 ) -> std::io::Result<bool> {
-    let n = stream.read(buf)?;
-    let raw = String::from_utf8_lossy(&buf[..n]);
+    let mut reader = BufReader::new(stream);
+
+    let mut raw = String::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line).unwrap_or(0) == 0 { break }
+        if line == "\r\n" || line == "\n" { break }
+        raw.push_str(&line);
+    }
+
     let request = Request::parse(&raw, body.len());
     let content_type = if embed_video { "Content-Type: video/mp4\r\n" } else { "" };
 
     if let Request::Post { boundary } = &request {
-        let header_end = raw.find("\r\n\r\n").map(|i| i + 4).unwrap_or(n);
-        let leftover = &buf[header_end..n];
-        let mut reader = BufReader::new(leftover.chain(&mut stream));
         handle_post(&mut reader, boundary);
-
-        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        let _ = reader.get_mut().write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
         return Ok(false);
     }
 
@@ -193,9 +197,10 @@ fn handle_connection(
         payload.len()
     );
 
-    let _ = stream
-    .write_all(header.as_bytes())
-        .and_then(|_| stream.write_all(payload));
+    let _ = reader
+        .get_mut()
+        .write_all(header.as_bytes())
+        .and_then(|_| reader.get_mut().write_all(payload));
 
     Ok(matches!(request, Request::Range(..)))
 }
@@ -284,7 +289,6 @@ fn main() -> std::io::Result<()> {
     };
     
     let port = listener.local_addr()?.port();
-    let mut buf = [0u8; 4096];
 
     println!("Sharing {filename} [{size:.1}{unit}] @ {protocol}://{}:{port}", local_ip());
 
@@ -297,13 +301,12 @@ fn main() -> std::io::Result<()> {
             Some(cfg) => match ServerConnection::new(cfg.clone()) {
                 Ok(conn) => handle_connection(
                     StreamOwned::new(conn, stream),
-                    &mut buf,
                     &body,
                     args.embed_video,
                 ),
                 Err(_e) => continue,
             },
-            None => handle_connection(stream, &mut buf, &body, args.embed_video),
+            None => handle_connection(stream, &body, args.embed_video),
         };
 
         if !keep_open && matches!(res, Ok(false)) {
