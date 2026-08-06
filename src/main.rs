@@ -39,8 +39,7 @@ impl Request {
             return Request::Bad;
         }
 
-        let mut range = None;
-        let mut boundary = None;
+        let (mut range, mut boundary) = (None, None);
 
         for line in lines {
             let Some((key, val)) = line.split_once(':') else { continue };
@@ -48,20 +47,21 @@ impl Request {
 
             if key.eq_ignore_ascii_case("user-agent") {
                 println!("\t{line}");
-            } else if key.eq_ignore_ascii_case("range") {
+            }
+            
+            else if key.eq_ignore_ascii_case("range") {
                 range = val.strip_prefix("bytes=")
                     .and_then(|r| r.split_once('-'))
                     .and_then(|(start, end)| Some((start.parse().ok()?, end.parse().unwrap_or(total - 1))));
-            } else if key.eq_ignore_ascii_case("content-type") {
+            }
+            
+            else if key.eq_ignore_ascii_case("content-type") {
                 boundary = val.split_once("boundary=").map(|(_, b)| b.to_owned());
             }
         }
 
         if is_post {
-            return match boundary {
-                Some(boundary) => Request::Post { boundary },
-                None => Request::Bad,
-            };
+            return boundary.map_or(Request::Bad, |boundary| Request::Post { boundary });
         }
 
         match range {
