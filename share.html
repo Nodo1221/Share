@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>V I B E 🌀 U P L O A D</title>
     
-    <!-- Fancy Fonts: Syne for heavy vibes, Inter for UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Syne:wght@800&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            /* Extreme Gradient Palette */
             --bg-deep: #03001c;
-            --clr-1: #ff00c8; /* Neon Pink */
-            --clr-2: #00fff5; /* Cyan */
-            --clr-3: #8a2be2; /* Violet */
-            --clr-4: #fffc00; /* Yellow */
+            --clr-1: #ff00c8; 
+            --clr-2: #00fff5; 
+            --clr-3: #8a2be2; 
+            --clr-4: #fffc00; 
+            --clr-error: #ff3333;
+            --clr-success: #00ff88;
             
             --text-main: #ffffff;
             --glass: rgba(255, 255, 255, 0.03);
@@ -29,7 +29,6 @@
             --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* Reset & Base */
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
         
         body {
@@ -41,10 +40,10 @@
             align-items: center;
             justify-content: center;
             overflow-x: hidden;
-            perspective: 1000px; /* For 3D effects */
+            perspective: 1000px; 
         }
 
-        /* --- 1. Animated Background Slop --- */
+        /* Animated Background Slop */
         .wavy-bg {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -62,7 +61,7 @@
             100% { transform: scale(1.2) rotate(5deg); }
         }
 
-        /* --- 2. Main Glass Container --- */
+        /* Main Glass Container */
         .main-card {
             background: var(--glass);
             backdrop-filter: blur(25px) saturate(180%);
@@ -76,8 +75,6 @@
             position: relative;
             z-index: 10;
             transition: transform 0.3s var(--ease-out-expo), box-shadow 0.3s ease;
-            
-            /* Entrance animation */
             animation: cardEntrance 0.8s var(--ease-out-expo) forwards;
             opacity: 0;
             transform: translateY(40px) rotateX(10deg);
@@ -87,12 +84,11 @@
             to { opacity: 1; transform: translateY(0) rotateX(0deg); }
         }
 
-        /* Interaction: Tilt on hover (requires JS for smooth effect, but CSS gets vibes) */
         .main-card:hover {
             box-shadow: 0 30px 100px rgba(138, 43, 226, 0.3);
         }
 
-        /* --- 3. Typography Slop --- */
+        /* Typography Slop */
         .header { text-align: center; margin-bottom: 30px; }
         
         .vibey-title {
@@ -120,18 +116,16 @@
             text-transform: uppercase;
         }
 
-        /* --- 4. The Holographic Void (Drag/Drop Area) --- */
+        /* The Holographic Void */
         .drop-zone {
             position: relative;
             border-radius: 20px;
-            padding: 60px 20px;
+            padding: 40px 20px;
             text-align: center;
             cursor: pointer;
             overflow: hidden;
             transition: all 0.4s var(--ease-out-expo);
             border: 2px solid transparent;
-            
-            /* Animated Border Gradient trick */
             background: linear-gradient(var(--bg-deep), var(--bg-deep)) padding-box,
                         linear-gradient(135deg, var(--clr-1), var(--clr-3), var(--clr-2)) border-box;
             background-size: 200% 200%;
@@ -144,14 +138,12 @@
             100% { background-position: 0% 50%; }
         }
 
-        /* Drag over state */
         .drop-zone.dragover {
             transform: scale(1.02);
             box-shadow: 0 0 40px rgba(0, 255, 245, 0.4);
             border-color: rgba(255,255,255,0.5) border-box;
         }
 
-        /* Native input hidden but functional */
         .file-input {
             position: absolute;
             inset: 0;
@@ -162,12 +154,12 @@
             z-index: 10;
         }
 
-        /* Abstract Visualizer instead of icon */
+        /* Abstract Visualizer */
         .vibe-visualizer {
             position: relative;
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 20px;
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 15px;
             transform-style: preserve-3d;
             animation: float 4s ease-in-out infinite;
         }
@@ -198,7 +190,7 @@
         .core {
             position: absolute;
             top: 50%; left: 50%;
-            width: 20px; height: 20px;
+            width: 16px; height: 16px;
             background: #fff;
             border-radius: 50%;
             transform: translate(-50%, -50%);
@@ -219,34 +211,45 @@
             font-size: 1.1rem;
             color: rgba(255,255,255,0.9);
             text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            pointer-events: none;
         }
 
-        /* --- 5. File List Slop --- */
+        /* File List Slop with Remove Buttons */
         .file-list {
             margin-top: 20px;
-            max-height: 150px;
+            max-height: 160px;
             overflow-y: auto;
             padding-right: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .file-item {
             background: rgba(255,255,255,0.05);
             border-radius: 12px;
             padding: 10px 15px;
-            margin-bottom: 8px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             font-size: 0.85rem;
             border: 1px solid transparent;
-            transform: translateZ(0); /* Hardware acceleration */
+            transform: translateZ(0); 
             animation: itemEntry 0.4s var(--ease-out-expo) forwards;
             opacity: 0;
             transform: translateY(10px);
+            transition: all 0.3s ease;
         }
         
+        .file-item.removing {
+            animation: itemExit 0.3s var(--ease-out-expo) forwards;
+        }
+
         @keyframes itemEntry {
             to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes itemExit {
+            to { opacity: 0; transform: translateX(30px) scale(0.9); }
         }
 
         .file-item:hover {
@@ -254,21 +257,54 @@
             background: rgba(255,255,255,0.08);
         }
 
+        .file-info {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            width: 80%;
+        }
+
         .file-name {
             color: #fff;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 70%;
+            font-weight: 600;
         }
-        .file-size { color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums; }
+        .file-size { 
+            color: rgba(255,255,255,0.5); 
+            font-variant-numeric: tabular-nums; 
+            font-size: 0.75rem;
+            margin-top: 2px;
+        }
+
+        .remove-btn {
+            background: rgba(255, 51, 51, 0.1);
+            color: var(--clr-error);
+            border: 1px solid transparent;
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: bold;
+        }
+
+        .remove-btn:hover {
+            background: var(--clr-error);
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.5);
+            transform: scale(1.1);
+        }
 
         /* Custom Scrollbar */
         .file-list::-webkit-scrollbar { width: 4px; }
         .file-list::-webkit-scrollbar-track { background: transparent; }
         .file-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
-        /* --- 6. The Submit Button Slop --- */
+        /* Submit Button Slop */
         .submit-btn {
             width: 100%;
             margin-top: 25px;
@@ -284,24 +320,21 @@
             position: relative;
             overflow: hidden;
             transition: all 0.3s ease;
-            
-            /* Multi-layer gradient background */
             background: linear-gradient(135deg, var(--clr-2) 0%, var(--clr-1) 50%, var(--clr-3) 100%);
             background-size: 200% auto;
             box-shadow: 0 10px 30px rgba(255, 0, 200, 0.3);
         }
 
-        .submit-btn:hover {
+        .submit-btn:hover:not(:disabled) {
             background-position: right center;
             box-shadow: 0 15px 40px rgba(255, 0, 200, 0.5);
             transform: translateY(-2px);
         }
         
-        .submit-btn:active {
+        .submit-btn:active:not(:disabled) {
             transform: translateY(1px) scale(0.98);
         }
 
-        /* Shin effect on button */
         .submit-btn::after {
             content: '';
             position: absolute;
@@ -313,7 +346,7 @@
             opacity: 0;
         }
         
-        .submit-btn:hover::after {
+        .submit-btn:hover:not(:disabled)::after {
             animation: shine 0.8s;
         }
         
@@ -322,49 +355,60 @@
             100% { margin-left: 100%; opacity: 0; }
         }
 
-        /* Disabled state slop */
+        /* States for JS Fetch logic */
         .submit-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            pointer-events: none;
             box-shadow: none;
         }
+        
+        .submit-btn.loading {
+            background: linear-gradient(135deg, #444, #888);
+            color: #fff;
+            animation: pulse 1.5s infinite alternate;
+        }
+        
+        .submit-btn.success {
+            background: var(--clr-success);
+            color: #000;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+        }
+        
+        .submit-btn.error {
+            background: var(--clr-error);
+            color: #fff;
+            box-shadow: 0 0 30px rgba(255, 51, 51, 0.5);
+        }
 
-        /* --- 7. Mobile Optimization --- */
+        @keyframes pulse {
+            to { box-shadow: 0 0 20px rgba(255,255,255,0.3); }
+        }
+
+        /* Mobile Optimization */
         @media (max-width: 480px) {
-            .main-card { padding: 30px 20px; border-radius: 24px; }
+            .main-card { padding: 30px 20px; border-radius: 24px; width: 95%; }
             .vibey-title { font-size: 1.8rem; }
-            .drop-zone { padding: 40px 10px; }
-            .vibe-visualizer { width: 60px; height: 60px; margin-bottom: 15px; }
-            .orb { border-width: 1px; }
-            .core { width: 15px; height: 15px; }
+            .drop-zone { padding: 30px 10px; }
             .submit-btn { padding: 15px; font-size: 1rem; }
         }
         
-        /* Fix for iOS momentum scrolling */
         .file-list { -webkit-overflow-scrolling: touch; }
-
     </style>
 </head>
 <body>
 
-    <!-- Background Layer -->
     <div class="wavy-bg"></div>
 
-    <!-- Main UI Card -->
     <div class="main-card" id="tilt-card">
         <div class="header">
             <h1 class="vibey-title">Transmit<br>Data</h1>
             <p class="subtitle">Feed the machine</p>
         </div>
 
-        <!-- RETAINED NATIVE FORM METHOD -->
-        <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form">
+        <!-- Form hijacked by JS to prevent redirect -->
+        <form id="upload-form">
             
-            <!-- Custom Drop Zone acting as visual cover for input -->
             <div class="drop-zone" id="drop-zone">
-                
-                <!-- 3D Holographic Visualizer -->
                 <div class="vibe-visualizer">
                     <div class="orb"></div>
                     <div class="orb"></div>
@@ -373,13 +417,12 @@
                 </div>
                 
                 <p class="drop-text" id="drop-text">DROP FILES</p>
-                <p style="font-size:0.8rem; color:rgba(255,255,255,0.5); margin-top:5px;">or click to browse</p>
+                <p style="font-size:0.8rem; color:rgba(255,255,255,0.5); margin-top:5px; pointer-events:none;">or click to browse</p>
                 
-                <!-- Input is absolutely positioned over the whole zone, opacity 0 -->
-                <input type="file" name="files" multiple class="file-input" id="file-input">
+                <!-- Used only to open OS file dialog -->
+                <input type="file" multiple class="file-input" id="file-input">
             </div>
 
-            <!-- UI file list (populated by JS) -->
             <div class="file-list" id="file-list"></div>
 
             <button type="submit" class="submit-btn" id="submit-btn" disabled>
@@ -389,15 +432,17 @@
     </div>
 
     <script>
-        // JS is strictly for UI feedback, native form handles actual submission.
-        
+        // 1. Maintain our own File Array since FileList is immutable
+        let queuedFiles = [];
+
+        const form = document.getElementById('upload-form');
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
         const fileList = document.getElementById('file-list');
         const submitBtn = document.getElementById('submit-btn');
         const dropText = document.getElementById('drop-text');
 
-        // 1. Drag & Drop Visual States
+        // Drag & Drop Visuals
         ['dragenter', 'dragover'].forEach(eventName => {
             dropZone.addEventListener(eventName, (e) => {
                 e.preventDefault(); e.stopPropagation();
@@ -410,44 +455,59 @@
             dropZone.addEventListener(eventName, (e) => {
                 e.preventDefault(); e.stopPropagation();
                 dropZone.classList.remove('dragover');
-                if(fileInput.files.length === 0) dropText.innerText = "DROP FILES";
+                if(queuedFiles.length === 0) dropText.innerText = "DROP FILES";
+                else updateDropText();
             }, false);
         });
 
-        // The Drop event connects dropped files to the native input
+        // Handle Drops
         dropZone.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            // Key snippet: updates native input with dropped files
-            fileInput.files = files; 
-            handleFiles(files);
+            handleNewFiles(e.dataTransfer.files);
         }, false);
 
-        // 2. Handle File Selection via Click
+        // Handle Clicks/Browse
         fileInput.addEventListener('change', (e) => {
-            handleFiles(e.target.files);
+            handleNewFiles(e.target.files);
+            fileInput.value = ""; // Reset input so same file can be picked again if removed
         });
 
-        // 3. Update UI and Button State
-        function handleFiles(files) {
-            fileList.innerHTML = '';
-            const fileArray = Array.from(files);
+        // Process Incoming Files
+        function handleNewFiles(files) {
+            const newFiles = Array.from(files);
+            
+            newFiles.forEach(file => {
+                // Prevent duplicate files by checking name and size
+                const isDuplicate = queuedFiles.some(q => q.name === file.name && q.size === file.size);
+                if (!isDuplicate) {
+                    queuedFiles.push(file);
+                }
+            });
+            renderList();
+        }
 
-            if (fileArray.length > 0) {
-                dropText.innerText = `${fileArray.length} FILES LOADED`;
+        // Render the UI List
+        function renderList() {
+            fileList.innerHTML = '';
+
+            if (queuedFiles.length > 0) {
+                updateDropText();
                 submitBtn.disabled = false;
                 submitBtn.innerText = "BEGIN TRANSMISSION";
                 
-                // Populate list with entry animations
-                fileArray.forEach((file, index) => {
+                queuedFiles.forEach((file, index) => {
                     const size = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
                     const item = document.createElement('div');
                     item.className = 'file-item';
-                    item.style.animationDelay = `${index * 0.05}s`; // Staggered entry
+                    item.style.animationDelay = `${index * 0.03}s`;
                     
                     item.innerHTML = `
-                        <span class="file-name">📄 ${file.name}</span>
-                        <span class="file-size">${size}</span>
+                        <div class="file-info">
+                            <span class="file-name">📄 ${file.name}</span>
+                            <span class="file-size">${size}</span>
+                        </div>
+                        <button type="button" class="remove-btn" onclick="removeFile(${index}, this)">
+                            ✕
+                        </button>
                     `;
                     fileList.appendChild(item);
                 });
@@ -458,16 +518,94 @@
             }
         }
 
-        // --- 4. Bonus Mouse Tilt Effect for Card (adds serious vibe) ---
+        // Remove File Handler (exposed globally for the inline onclick)
+        window.removeFile = function(index, btnElement) {
+            const itemElement = btnElement.closest('.file-item');
+            
+            // Trigger exit animation
+            itemElement.classList.add('removing');
+            
+            // Wait for animation to finish before destroying data and re-rendering
+            setTimeout(() => {
+                queuedFiles.splice(index, 1);
+                renderList();
+            }, 300); // Matches CSS exit animation duration
+        };
+
+        function updateDropText() {
+            dropText.innerText = `${queuedFiles.length} FILE${queuedFiles.length > 1 ? 'S' : ''} LOADED`;
+        }
+
+        // The AJAX Upload Handler (No Redirect)
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // <-- STOPS THE PAGE REDIRECT
+            
+            if (queuedFiles.length === 0) return;
+
+            // Pack the data
+            const formData = new FormData();
+            queuedFiles.forEach(file => {
+                formData.append('files', file); // 'files' matches your requested name
+            });
+
+            // UI State: Loading
+            submitBtn.disabled = true;
+            submitBtn.innerText = "TRANSMITTING...";
+            submitBtn.className = "submit-btn loading";
+            
+            // Haptic bump
+            if ('vibrate' in navigator) navigator.vibrate(30);
+
+            try {
+                // Execute the POST request via JS Fetch
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // UI State: Success
+                    submitBtn.className = "submit-btn success";
+                    submitBtn.innerText = "TRANSMISSION COMPLETE ✨";
+                    queuedFiles = []; // Clear queue on success
+                    
+                    if ('vibrate' in navigator) navigator.vibrate([30, 50, 30]);
+
+                    // Reset back to idle after 2.5 seconds
+                    setTimeout(() => {
+                        submitBtn.className = "submit-btn";
+                        renderList(); // Re-render empty state
+                    }, 2500);
+                } else {
+                    throw new Error("Server rejected transmission.");
+                }
+
+            } catch (error) {
+                // UI State: Error
+                submitBtn.className = "submit-btn error";
+                submitBtn.innerText = "TRANSMISSION FAILED 💀";
+                console.error("Upload error:", error);
+                
+                if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+
+                // Reset back to idle so they can try again
+                setTimeout(() => {
+                    submitBtn.className = "submit-btn";
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = "RETRY TRANSMISSION";
+                }, 2500);
+            }
+        });
+
+        // 3D Card Tilt (Desktop only)
         const card = document.getElementById('tilt-card');
-        if (window.innerWidth > 768) { // Only on desktop for performance
+        if (window.innerWidth > 768) { 
             document.addEventListener('mousemove', (e) => {
                 const xAxis = (window.innerWidth / 2 - e.pageX) / 25;
                 const yAxis = (window.innerHeight / 2 - e.pageY) / 25;
                 card.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
             });
             
-            // Reset on mouse leave
             document.addEventListener('mouseleave', () => {
                 card.style.transform = `rotateY(0deg) rotateX(0deg)`;
                 card.style.transition = "transform 0.5s ease";
@@ -477,13 +615,6 @@
                 card.style.transition = "none";
             });
         }
-        
-        // Haptic feedback on mobile submit click (if supported)
-        submitBtn.addEventListener('click', () => {
-            if ('vibrate' in navigator) {
-                navigator.vibrate([30, 10, 30]);
-            }
-        });
 
     </script>
 </body>
