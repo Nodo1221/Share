@@ -105,14 +105,16 @@ fn handle_post(reader: &mut BufReader<impl Read>, boundary: &str) {
     let delim = format!("--{boundary}").into_bytes();
     let end = [delim.as_slice(), b"--"].concat();
     let mut line = Vec::new();
+    let _ = reader.read_until(b'\n', &mut line);
 
     loop {
-        line.clear();
-        if reader.read_until(b'\n', &mut line).unwrap_or(0) == 0 { break; }
-
         let t = strip_crlf(&line);
         if t == end { break; }
-        if t != delim { continue; }
+        if t != delim {
+            line.clear();
+            if reader.read_until(b'\n', &mut line).unwrap_or(0) == 0 { break; }
+            continue;
+        }
 
         let mut filename = None;
         loop {
@@ -136,18 +138,22 @@ fn handle_post(reader: &mut BufReader<impl Read>, boundary: &str) {
         let is_end = loop {
             let t_prev = strip_crlf(&prev);
             if t_prev == delim || t_prev == end {
-                break t_prev == end; // Handles completely empty files.
+                let done = t_prev == end;
+                line = prev;
+                break done;
             }
-
+        
             curr.clear();
             reader.read_until(b'\n', &mut curr).expect("connection shouldn't drop mid-upload");
-
+        
             let t_curr = strip_crlf(&curr);
             if t_curr == delim || t_curr == end {
                 out.write_all(strip_crlf(&prev)).unwrap();
-                break t_curr == end;
+                let done = t_curr == end;
+                line = curr;
+                break done;
             }
-
+        
             out.write_all(&prev).unwrap();
             std::mem::swap(&mut prev, &mut curr);
         };
