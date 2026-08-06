@@ -34,47 +34,34 @@ impl Request {
         let mut lines = raw.lines();
         let Some(first) = lines.next() else { return Request::Bad };
 
-        if first.starts_with("POST /upload ") {
-            let mut length: Option<usize> = None;
-            let mut boundary = None;
-
-            for line in lines {
-                let Some((key, val)) = line.split_once(':') else { continue };
-                let val = val.trim();
-
-                if key.eq_ignore_ascii_case("content-length") {
-                    length = val.parse().ok();
-                } else if key.eq_ignore_ascii_case("content-type") {
-                    boundary = val.split_once("boundary=").map(|(_, b)| b.to_string());
-                }
-            }
-
-            return match (length, boundary) {
-                (Some(_), Some(boundary)) => Request::Post { boundary },
-                _ => Request::Bad,
-            };
-        }
-
-        if !first.starts_with("GET / ") {
+        let is_post = first.starts_with("POST /upload ");
+        if !is_post && !first.starts_with("GET / ") {
             return Request::Bad;
         }
 
         let mut range = None;
+        let mut boundary = None;
+
         for line in lines {
             let Some((key, val)) = line.split_once(':') else { continue };
-        
+            let val = val.trim();
+
             if key.eq_ignore_ascii_case("user-agent") {
                 println!("\t{line}");
-            }
-
-            else if key.eq_ignore_ascii_case("range") {
-                range = val.trim()
-                    .strip_prefix("bytes=")
+            } else if key.eq_ignore_ascii_case("range") {
+                range = val.strip_prefix("bytes=")
                     .and_then(|r| r.split_once('-'))
-                    .and_then(|(start, end)| {
-                        Some((start.parse().ok()?, end.parse().unwrap_or(total - 1)))
-                    });
+                    .and_then(|(start, end)| Some((start.parse().ok()?, end.parse().unwrap_or(total - 1))));
+            } else if key.eq_ignore_ascii_case("content-type") {
+                boundary = val.split_once("boundary=").map(|(_, b)| b.to_owned());
             }
+        }
+
+        if is_post {
+            return match boundary {
+                Some(boundary) => Request::Post { boundary },
+                None => Request::Bad,
+            };
         }
 
         match range {
